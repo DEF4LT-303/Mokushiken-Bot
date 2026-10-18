@@ -1,12 +1,14 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { getTopProcesses } from '../services/systemService.js';
 import { buildTopProcessesEmbed } from '../services/embedBuilder.js';
+import { ensureServerOwner } from '../utils/permissions.js';
 import { config } from '../config.js';
 import os from 'node:os';
 
 export const data = new SlashCommandBuilder()
   .setName('top')
-  .setDescription('List top resource-consuming processes on the VPS')
+  .setDescription('List top resource-consuming processes on the VPS (Server Owner only)')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addStringOption((option) =>
     option
       .setName('sort_by')
@@ -27,7 +29,9 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  await interaction.deferReply();
+  if (!(await ensureServerOwner(interaction))) return;
+
+  await interaction.deferReply({ ephemeral: true });
 
   const sortBy = interaction.options.getString('sort_by') || 'cpu';
   const limit = interaction.options.getInteger('limit') || 10;

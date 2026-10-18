@@ -166,19 +166,20 @@ ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/github_deploy_key
 
 ## 🎮 Discord Slash Commands
 
-| Command | Description | Permissions |
-| :--- | :--- | :--- |
-| `/monitor setup [channel]` | Registers channel and starts live 30s status embed | `Manage Server` |
-| `/monitor stop [delete_message]` | Disables monitoring in this server | `Manage Server` |
-| `/monitor status` | Shows current monitoring config and health | `Manage Server` |
-| `/status [ephemeral]` | Instant one-off VPS stats snapshot | Everyone |
-| `/ping` | Tests Discord WebSocket, REST API, & VPS internet latency | Everyone |
-| `/top [sort_by] [limit]` | Displays top 5–20 processes by CPU or RAM | Everyone |
-| `/disk` | Displays all mounted filesystems and partition usage | Everyone |
-| `/network` | Displays network adapters, IPs, and transfer stats | Everyone |
-| `/docker` | Displays Docker containers and status | Everyone |
-| `/exec <command>` | Runs shell command on VPS with output in codeblock | Bot Owner only |
-| `/help` | Detailed bot guide and command listing | Everyone |
+| Command | Description | Permissions | Visibility |
+| :--- | :--- | :--- | :--- |
+| `/monitor setup [channel]` | Registers channel and starts live 30s status embed | **Server Owner only** | Ephemeral |
+| `/monitor stop [delete_message]` | Disables monitoring in this server | **Server Owner only** | Ephemeral |
+| `/monitor status` | Shows current monitoring config and health | **Server Owner only** | Ephemeral |
+| `/status` | Instant one-off VPS stats snapshot | **Server Owner only** | Ephemeral |
+| `/top [sort_by] [limit]` | Displays top 5–20 processes by CPU or RAM | **Server Owner only** | Ephemeral |
+| `/disk` | Displays all mounted filesystems and partition usage | **Server Owner only** | Ephemeral |
+| `/network` | Displays network adapters, IPs, and transfer stats | **Server Owner only** | Ephemeral |
+| `/docker` | Displays Docker containers and status | **Server Owner only** | Ephemeral |
+| `/ping` | Tests Discord WebSocket, REST API, & VPS internet latency | Everyone | Public |
+| `/invite` | Get an invite link with permissions pre-configured | Everyone | Public |
+| `/help` | Detailed bot guide and command listing | Everyone | Public |
+| `/exec <command>` | Runs shell command on VPS with output in codeblock | **Bot Owner only** | Ephemeral |
 
 ---
 

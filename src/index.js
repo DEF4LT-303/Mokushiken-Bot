@@ -56,11 +56,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   logger.info(`VPS Status Check Interval: ${config.checkInterval} seconds`);
   logger.info(`==============================================`);
 
-  readyClient.user.setActivity('VPS Health • /help', {
-    type: ActivityType.Watching,
-  });
-
-  // Initialize monitoring loop and recovery
+  // Initialize monitoring loop, recovery, and dynamic presence
   await initMonitorService(client);
 });
 

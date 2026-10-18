@@ -1,15 +1,19 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { getDetailedDisks } from '../services/systemService.js';
 import { buildDiskEmbed } from '../services/embedBuilder.js';
+import { ensureServerOwner } from '../utils/permissions.js';
 import { config } from '../config.js';
 import os from 'node:os';
 
 export const data = new SlashCommandBuilder()
   .setName('disk')
-  .setDescription('View detailed storage partitions and disk usage');
+  .setDescription('View detailed storage partitions and disk usage (Server Owner only)')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 export async function execute(interaction) {
-  await interaction.deferReply();
+  if (!(await ensureServerOwner(interaction))) return;
+
+  await interaction.deferReply({ ephemeral: true });
 
   const serverName = config.serverName || os.hostname();
 

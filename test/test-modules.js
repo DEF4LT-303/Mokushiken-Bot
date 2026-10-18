@@ -162,6 +162,22 @@ async function runTests() {
   assert.ok(dockerEmbed.data.title.includes('Docker Containers'), 'Docker embed check');
   console.log('  ✅ EmbedBuilder passed.');
 
+  // 4b. Test Presence Function
+  console.log('\nTesting updateBotPresence in src/services/monitorService.js...');
+  const { updateBotPresence } = await import('../src/services/monitorService.js');
+  assert.ok(typeof updateBotPresence === 'function');
+  // Run with null client (should safely no-op without throwing)
+  updateBotPresence(stats);
+  console.log('  ✅ updateBotPresence safely handled.');
+
+  // 4c. Test Permission Helpers
+  console.log('\nTesting src/utils/permissions.js...');
+  const { isServerOwner, ensureServerOwner } = await import('../src/utils/permissions.js');
+  assert.strictEqual(isServerOwner({ guild: null }), false);
+  assert.strictEqual(isServerOwner({ guild: { ownerId: '123' }, user: { id: '123' } }), true);
+  assert.strictEqual(isServerOwner({ guild: { ownerId: '123' }, user: { id: '999' } }), false);
+  console.log('  ✅ Permissions helpers passed.');
+
   // 5. Test Slash Commands
   console.log('\nTesting command definitions in src/commands/...');
   const commandsPath = path.join(__dirname, '../src/commands');

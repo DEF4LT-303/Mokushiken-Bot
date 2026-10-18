@@ -1,24 +1,22 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { getSystemStats } from '../services/systemService.js';
 import { buildStatusSnapshotEmbed } from '../services/embedBuilder.js';
+import { ensureServerOwner } from '../utils/permissions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('status')
-  .setDescription('Get an instant snapshot of VPS system health and resource consumption')
-  .addBooleanOption((option) =>
-    option
-      .setName('ephemeral')
-      .setDescription('Whether to make the response visible only to you (default: false)')
-      .setRequired(false)
-  );
+  .setDescription('Get a private snapshot of VPS system health (Server Owner only)')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 export async function execute(interaction) {
-  const isEphemeral = interaction.options.getBoolean('ephemeral') ?? false;
-  await interaction.deferReply({ ephemeral: isEphemeral });
+  if (!(await ensureServerOwner(interaction))) return;
+
+  await interaction.deferReply({ ephemeral: true });
 
   try {
     const stats = await getSystemStats();
-    const avatarUrl = interaction.client.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || null;
+    const avatarUrl =
+      interaction.client.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || null;
     const embed = buildStatusSnapshotEmbed(stats, interaction.client.ws.ping, avatarUrl);
     return interaction.editReply({ embeds: [embed] });
   } catch (err) {

@@ -1,4 +1,4 @@
-import { PermissionsBitField } from 'discord.js';
+import { PermissionsBitField, ActivityType } from 'discord.js';
 import { config } from '../config.js';
 import {
   getAllMonitorConfigs,
@@ -9,11 +9,55 @@ import {
 } from '../utils/storage.js';
 import { getSystemStats } from './systemService.js';
 import { buildMonitorEmbed } from './embedBuilder.js';
+import { formatDuration } from '../utils/formatters.js';
 import { logger } from '../utils/logger.js';
 
 let intervalTimer = null;
 let discordClient = null;
 let isUpdating = false;
+let presenceRotationIndex = 0;
+
+/**
+ * Updates the bot's Discord presence with live metrics and dynamic health status.
+ */
+export function updateBotPresence(stats) {
+  if (!discordClient || !discordClient.user) return;
+
+  const maxLoad = Math.max(stats.cpu.usagePercent, stats.memory.percent, stats.disk.percent);
+  let status = 'online';
+  if (maxLoad >= 90) {
+    status = 'dnd';
+  } else if (maxLoad >= 75) {
+    status = 'idle';
+  }
+
+  const activities = [
+    {
+      name: `CPU: ${stats.cpu.usagePercent.toFixed(1)}% | RAM: ${stats.memory.percent.toFixed(1)}%`,
+      type: ActivityType.Watching,
+    },
+    {
+      name: `${stats.serverName} • Up ${formatDuration(stats.os.uptimeSeconds)}`,
+      type: ActivityType.Watching,
+    },
+    {
+      name: '/monitor • /status',
+      type: ActivityType.Listening,
+    },
+  ];
+
+  const currentActivity = activities[presenceRotationIndex % activities.length];
+  presenceRotationIndex++;
+
+  try {
+    discordClient.user.setPresence({
+      status,
+      activities: [currentActivity],
+    });
+  } catch (err) {
+    logger.warn('Failed to update bot presence:', err.message);
+  }
+}
 
 /**
  * Searches for a previous monitor message in the channel.
@@ -134,12 +178,14 @@ async function runMonitorCycle() {
   isUpdating = true;
 
   try {
+    const stats = await getSystemStats();
+    updateBotPresence(stats);
+
     const configs = getAllMonitorConfigs();
     if (configs.length === 0) {
       return;
     }
 
-    const stats = await getSystemStats();
     const avatarUrl = discordClient?.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || null;
     const embed = buildMonitorEmbed(stats, discordClient?.ws?.ping, avatarUrl);
 
@@ -158,12 +204,12 @@ export async function initMonitorService(client) {
   discordClient = client;
 
   logger.monitor(`Initializing monitoring service (interval: ${config.checkInterval}s)...`);
-  const configs = getAllMonitorConfigs();
+  const initialStats = await getSystemStats();
+  updateBotPresence(initialStats);
 
+  const configs = getAllMonitorConfigs();
   if (configs.length > 0) {
     logger.monitor(`Performing startup recovery for ${configs.length} registered channel(s)...`);
-    const initialStats = await getSystemStats();
-
     for (const item of configs) {
       await setupChannelMessage(item, initialStats);
     }

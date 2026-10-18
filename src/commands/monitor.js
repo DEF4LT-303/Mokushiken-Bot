@@ -6,12 +6,13 @@ import {
 } from 'discord.js';
 import { registerChannel, unregisterChannel } from '../services/monitorService.js';
 import { getMonitorConfig } from '../utils/storage.js';
+import { ensureServerOwner } from '../utils/permissions.js';
 import { config } from '../config.js';
 
 export const data = new SlashCommandBuilder()
   .setName('monitor')
-  .setDescription('Manage the VPS real-time monitoring service')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .setDescription('Manage the VPS real-time monitoring service (Server Owner only)')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommand((subcommand) =>
     subcommand
       .setName('setup')
@@ -42,12 +43,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  if (!interaction.guildId) {
-    return interaction.reply({
-      content: '❌ This command can only be used inside a Discord server.',
-      ephemeral: true,
-    });
-  }
+  if (!(await ensureServerOwner(interaction))) return;
 
   const subcommand = interaction.options.getSubcommand();
 

@@ -1,15 +1,19 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { getDockerInfo } from '../services/systemService.js';
 import { buildDockerEmbed } from '../services/embedBuilder.js';
+import { ensureServerOwner } from '../utils/permissions.js';
 import { config } from '../config.js';
 import os from 'node:os';
 
 export const data = new SlashCommandBuilder()
   .setName('docker')
-  .setDescription('List Docker containers and runtime status');
+  .setDescription('List Docker containers and runtime status (Server Owner only)')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 export async function execute(interaction) {
-  await interaction.deferReply();
+  if (!(await ensureServerOwner(interaction))) return;
+
+  await interaction.deferReply({ ephemeral: true });
 
   const serverName = config.serverName || os.hostname();
 
