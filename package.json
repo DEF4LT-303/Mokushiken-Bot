@@ -1,0 +1,27 @@
+{
+  "name": "vps-monitor-bot",
+  "version": "1.0.0",
+  "description": "Discord bot to monitor VPS hardware, resource usage, and system health in real-time.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "test": "node test/test-modules.js"
+  },
+  "keywords": [
+    "discord",
+    "discord-bot",
+    "vps",
+    "monitoring",
+    "systeminformation",
+    "sysadmin"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7",
+    "systeminformation": "^5.25.11"
+  }
+}

@@ -1,0 +1,77 @@
+name: CI/CD - Test & Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: npm test
+
+  deploy:
+    name: Deploy to VPS
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE || '' }}
+          script: |
+            set -e
+            echo "📦 Navigating to project directory..."
+            cd "${{ secrets.VPS_TARGET_DIR || '/opt/monitor-bot' }}"
+
+            echo "🔄 Pulling latest changes from main branch..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "📥 Installing production dependencies..."
+            npm install --omit=dev
+
+            echo "🚀 Reloading slash commands..."
+            if [ -f .env ]; then
+              npm run deploy || echo "⚠️ Slash command deployment failed or skipped."
+            else
+              echo "⚠️ .env file not found, skipping command deployment."
+            fi
+
+            echo "🔁 Restarting bot process..."
+            if command -v pm2 >/dev/null 2>&1; then
+              pm2 reload ecosystem.config.cjs --update-env || pm2 restart vps-monitor-bot || pm2 start ecosystem.config.cjs
+              pm2 save
+            elif systemctl is-active --quiet vps-monitor 2>/dev/null; then
+              sudo systemctl restart vps-monitor
+            else
+              echo "⚠️ Notice: Neither PM2 nor vps-monitor systemd service was running. Please start the bot once manually."
+            fi
+
+            echo "✅ Deployment finished successfully!"
