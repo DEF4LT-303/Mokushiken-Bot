@@ -9,6 +9,7 @@ import {
 } from '../utils/storage.js';
 import { getSystemStats } from './systemService.js';
 import { buildMonitorEmbed } from './embedBuilder.js';
+import { logger } from '../utils/logger.js';
 
 let intervalTimer = null;
 let discordClient = null;
@@ -38,11 +39,11 @@ async function findExistingMonitorMessage(channel, savedMessageId) {
       (m) =>
         m.author.id === discordClient.user.id &&
         m.embeds.length > 0 &&
-        m.embeds[0].title?.startsWith('🖥️ VPS Monitor:')
+        m.embeds[0].title?.startsWith('🖥️ VPS Monitor')
     );
     return botEmbedMsg || null;
   } catch (err) {
-    console.warn(`[Monitor] Could not fetch message history in #${channel.name}:`, err.message);
+    logger.warn(`Could not fetch message history in #${channel.name}:`, err.message);
     return null;
   }
 }
@@ -55,7 +56,7 @@ async function setupChannelMessage(item, stats) {
   try {
     const channel = await discordClient.channels.fetch(item.channelId).catch(() => null);
     if (!channel || !channel.isTextBased()) {
-      console.warn(`[Monitor] Channel ${item.channelId} for guild ${item.guildId} not found or not text-based.`);
+      logger.warn(`Channel ${item.channelId} for guild ${item.guildId} not found or not text-based.`);
       return;
     }
 
@@ -66,7 +67,7 @@ async function setupChannelMessage(item, stats) {
       !permissions.has(PermissionsBitField.Flags.SendMessages) ||
       !permissions.has(PermissionsBitField.Flags.EmbedLinks)
     ) {
-      console.warn(`[Monitor] Missing permissions in channel #${channel.name} (${channel.id}).`);
+      logger.warn(`Missing permissions in channel #${channel.name} (${channel.id}).`);
       return;
     }
 
@@ -75,19 +76,20 @@ async function setupChannelMessage(item, stats) {
     if (existingMsg) {
       try {
         await existingMsg.delete();
-        console.log(`[Monitor] Cleaned up previous monitor embed (${existingMsg.id}) in #${channel.name}.`);
+        logger.monitor(`Cleaned up previous monitor embed (${existingMsg.id}) in #${channel.name}.`);
       } catch (err) {
-        console.warn(`[Monitor] Could not delete old monitor message:`, err.message);
+        logger.warn(`Could not delete old monitor message:`, err.message);
       }
     }
 
     // Post fresh embed at bottom
-    const embed = buildMonitorEmbed(stats);
+    const avatarUrl = discordClient?.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || null;
+    const embed = buildMonitorEmbed(stats, discordClient?.ws?.ping, avatarUrl);
     const newMsg = await channel.send({ embeds: [embed] });
     updateMessageId(item.guildId, newMsg.id);
-    console.log(`[Monitor] Live monitor posted in #${channel.name} (${newMsg.id}).`);
+    logger.monitor(`Live monitor posted in #${channel.name} (${newMsg.id}).`);
   } catch (err) {
-    console.error(`[Monitor] Failed setting up monitor in guild ${item.guildId}:`, err.message);
+    logger.error(`Failed setting up monitor in guild ${item.guildId}:`, err.message);
   }
 }
 
@@ -112,15 +114,15 @@ async function updateChannelEmbed(item, stats, embed) {
     } catch (err) {
       // If message was deleted (10008 Unknown Message), recreate it
       if (err.code === 10008 || err.message?.includes('Unknown Message')) {
-        console.log(`[Monitor] Tracked message ${item.messageId} missing in #${channel.name}, posting new embed.`);
+        logger.monitor(`Tracked message ${item.messageId} missing in #${channel.name}, posting new embed.`);
         const newMsg = await channel.send({ embeds: [embed] });
         updateMessageId(item.guildId, newMsg.id);
       } else {
-        console.warn(`[Monitor] Failed editing message in #${channel.name}:`, err.message);
+        logger.warn(`Failed editing message in #${channel.name}:`, err.message);
       }
     }
   } catch (err) {
-    console.error(`[Monitor] Error in update loop for guild ${item.guildId}:`, err.message);
+    logger.error(`Error in update loop for guild ${item.guildId}:`, err.message);
   }
 }
 
@@ -138,11 +140,12 @@ async function runMonitorCycle() {
     }
 
     const stats = await getSystemStats();
-    const embed = buildMonitorEmbed(stats);
+    const avatarUrl = discordClient?.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || null;
+    const embed = buildMonitorEmbed(stats, discordClient?.ws?.ping, avatarUrl);
 
     await Promise.allSettled(configs.map((item) => updateChannelEmbed(item, stats, embed)));
   } catch (err) {
-    console.error('[Monitor] Critical error in monitor cycle:', err);
+    logger.error('Critical error in monitor cycle:', err);
   } finally {
     isUpdating = false;
   }
@@ -154,11 +157,11 @@ async function runMonitorCycle() {
 export async function initMonitorService(client) {
   discordClient = client;
 
-  console.log(`[Monitor] Initializing monitoring service (interval: ${config.checkInterval}s)...`);
+  logger.monitor(`Initializing monitoring service (interval: ${config.checkInterval}s)...`);
   const configs = getAllMonitorConfigs();
 
   if (configs.length > 0) {
-    console.log(`[Monitor] Performing startup recovery for ${configs.length} registered channel(s)...`);
+    logger.monitor(`Performing startup recovery for ${configs.length} registered channel(s)...`);
     const initialStats = await getSystemStats();
 
     for (const item of configs) {
@@ -171,7 +174,7 @@ export async function initMonitorService(client) {
   }
 
   intervalTimer = setInterval(runMonitorCycle, config.checkInterval * 1000);
-  console.log('[Monitor] Background 30s monitoring loop started.');
+  logger.monitor('Background 30s monitoring loop started.');
 }
 
 /**
@@ -179,7 +182,8 @@ export async function initMonitorService(client) {
  */
 export async function registerChannel(guildId, channel) {
   const stats = await getSystemStats();
-  const embed = buildMonitorEmbed(stats);
+  const avatarUrl = discordClient?.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || null;
+  const embed = buildMonitorEmbed(stats, discordClient?.ws?.ping, avatarUrl);
 
   // Check if channel already has an active monitor message
   const currentConfig = getMonitorConfig(guildId);
@@ -199,6 +203,7 @@ export async function registerChannel(guildId, channel) {
     enabled: true,
   });
 
+  logger.monitor(`Channel registered: #${channel.name} (${channel.id}) in guild ${guildId}`);
   return message;
 }
 
@@ -222,6 +227,7 @@ export async function unregisterChannel(guildId, deleteMessage = false) {
   }
 
   removeMonitorConfig(guildId);
+  logger.monitor(`Channel unregistered for guild ${guildId}`);
   return true;
 }
 
@@ -233,5 +239,5 @@ export function stopMonitorService() {
     clearInterval(intervalTimer);
     intervalTimer = null;
   }
-  console.log('[Monitor] Monitoring service stopped.');
+  logger.monitor('Monitoring service stopped.');
 }

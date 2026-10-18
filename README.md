@@ -111,10 +111,15 @@ npm install -g pm2
 # Start bot using ecosystem config
 pm2 start ecosystem.config.cjs
 
+# View live real-time logs
+pm2 logs vps-monitor-bot
+
 # Make PM2 restart automatically on VPS reboot
 pm2 save
 pm2 startup
 ```
+
+Logs are also written directly to `./logs/bot.log` and `./logs/error.log`.
 
 #### Production with Systemd (Linux alternative):
 1. Copy `systemd/vps-monitor.service` to `/etc/systemd/system/vps-monitor.service`.

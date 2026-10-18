@@ -38,6 +38,18 @@ async function runTests() {
   assert.strictEqual(healthRed.emoji, '🔴');
   console.log('  ✅ Formatters passed.');
 
+  // 1b. Test Logger
+  console.log('\nTesting src/utils/logger.js...');
+  const { logger } = await import('../src/utils/logger.js');
+  assert.ok(typeof logger.info === 'function');
+  assert.ok(typeof logger.warn === 'function');
+  assert.ok(typeof logger.error === 'function');
+  assert.ok(typeof logger.monitor === 'function');
+  assert.ok(typeof logger.cmd === 'function');
+  logger.info('Test info log message');
+  logger.cmd('TestUser#1234', '123456789', 'TestServer', 'ping', 15, true);
+  console.log('  ✅ Logger passed.');
+
   // 2. Test Storage Operations
   console.log('\nTesting src/utils/storage.js...');
   const {
@@ -117,12 +129,25 @@ async function runTests() {
     buildDockerEmbed,
   } = await import('../src/services/embedBuilder.js');
 
-  const monitorEmbed = buildMonitorEmbed(stats);
-  assert.ok(monitorEmbed.data.title.includes('VPS Monitor:'), 'Title check');
-  assert.ok(monitorEmbed.data.fields.length >= 4, 'Fields check');
+  const monitorEmbed = buildMonitorEmbed(stats, 42, 'https://example.com/avatar.png');
+  assert.ok(monitorEmbed.data.title.includes('VPS Monitor'), 'Title check');
+  assert.strictEqual(monitorEmbed.data.thumbnail.url, 'https://example.com/avatar.png');
+  assert.ok(monitorEmbed.data.fields.length >= 6, 'Fields check');
 
-  const statusEmbed = buildStatusSnapshotEmbed(stats);
-  assert.ok(statusEmbed.data.title.includes('System Snapshot:'), 'Status embed check');
+  // Verify CPU field has Overall bar
+  const cpuField = monitorEmbed.data.fields.find((f) => f.name.includes('CPU'));
+  assert.ok(cpuField, 'CPU field must exist');
+  assert.ok(cpuField.value.includes('Overall:'), 'CPU field must contain Overall load bar');
+
+  // Verify Storage field name and value are simplified
+  const storageField = monitorEmbed.data.fields.find((f) => f.name.includes('Storage'));
+  assert.ok(storageField, 'Storage field must exist');
+  assert.strictEqual(storageField.name, '💾 Storage Distribution', 'Storage field name must not contain drive letter');
+  assert.ok(!storageField.value.includes('Filesystem:'), 'Storage field must not contain filesystem line');
+
+  const statusEmbed = buildStatusSnapshotEmbed(stats, 42, 'https://example.com/avatar.png');
+  assert.ok(statusEmbed.data.title.includes('System Snapshot'), 'Status embed check');
+  assert.strictEqual(statusEmbed.data.thumbnail.url, 'https://example.com/avatar.png');
 
   const topEmbed = buildTopProcessesEmbed(stats.serverName, procs, 'cpu');
   assert.ok(topEmbed.data.title.includes('Top Processes'), 'Top embed check');

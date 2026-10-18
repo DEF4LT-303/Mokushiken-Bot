@@ -7,6 +7,10 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '150M',
+      time: true, // Prepends timestamps to all PM2 console log lines
+      out_file: './logs/pm2-out.log',
+      error_file: './logs/pm2-error.log',
+      merge_logs: true,
       env: {
         NODE_ENV: 'production',
       },

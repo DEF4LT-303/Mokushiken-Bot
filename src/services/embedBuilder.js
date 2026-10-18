@@ -8,60 +8,109 @@ import {
 } from '../utils/formatters.js';
 
 /**
- * Builds the primary live VPS monitoring embed.
+ * Builds the primary live VPS monitoring embed with clean, high-signal metrics.
  */
-export function buildMonitorEmbed(stats) {
+export function buildMonitorEmbed(stats, botPing = null, botAvatarUrl = null) {
   const health = getHealthStatus(
     stats.cpu.usagePercent,
     stats.memory.percent,
     stats.disk.percent
   );
 
+  // Format clean load bars for individual cores
+  let coreBarsText = '';
+  if (Array.isArray(stats.cpu.perCore) && stats.cpu.perCore.length > 0) {
+    const cores = stats.cpu.perCore.slice(0, 8);
+    if (cores.length <= 4) {
+      coreBarsText = cores
+        .map((load, idx) => `\`Core ${idx}:\` ${generateProgressBar(load, 8)}`)
+        .join('\n');
+    } else {
+      const pairs = [];
+      for (let i = 0; i < cores.length; i += 2) {
+        if (i + 1 < cores.length) {
+          pairs.push(
+            `\`C${i}:\` ${generateProgressBar(cores[i], 6)}  \`C${i + 1}:\` ${generateProgressBar(cores[i + 1], 6)}`
+          );
+        } else {
+          pairs.push(`\`C${i}:\` ${generateProgressBar(cores[i], 6)}`);
+        }
+      }
+      coreBarsText = pairs.join('\n');
+    }
+  }
+
+  const pingDisplay =
+    botPing !== null && botPing >= 0 ? `${Math.round(botPing)}ms` : 'Healthy';
+
   const embed = new EmbedBuilder()
-    .setTitle(`🖥️ VPS Monitor: ${stats.serverName}`)
+    .setTitle(`🖥️ VPS Monitor • ${stats.serverName}`)
     .setColor(health.color)
     .setDescription(
-      `**OS:** \`${stats.os.distro} (${stats.os.arch})\` | **Host:** \`${stats.os.hostname}\`\n` +
-      `**Uptime:** ⏳ System: \`${formatDuration(stats.os.uptimeSeconds)}\` • 🤖 Bot: \`${formatDuration(stats.os.botUptimeSeconds)}\``
-    )
-    .addFields(
-      {
-        name: '🔥 CPU Load',
-        value: `${generateProgressBar(stats.cpu.usagePercent)}\n` +
-          `• **Model:** ${stats.cpu.brand}\n` +
-          `• **Cores:** ${stats.cpu.cores} threads\n` +
-          `• **Load Avg:** \`${stats.cpu.loadAvg.map((l) => l.toFixed(2)).join(', ')}\``,
-        inline: false,
-      },
-      {
-        name: '🧠 Memory & Swap',
-        value: `${generateProgressBar(stats.memory.percent)}\n` +
-          `• **RAM Used:** \`${formatBytes(stats.memory.used)}\` / \`${formatBytes(stats.memory.total)}\`\n` +
-          `• **RAM Available:** \`${formatBytes(stats.memory.available)}\`\n` +
-          `• **Swap:** \`${formatBytes(stats.memory.swapUsed)}\` / \`${formatBytes(stats.memory.swapTotal)}\` (${stats.memory.swapPercent.toFixed(1)}%)`,
-        inline: false,
-      },
-      {
-        name: `💾 Storage (${stats.disk.mount || '/'})`,
-        value: `${generateProgressBar(stats.disk.percent)}\n` +
-          `• **Used:** \`${formatBytes(stats.disk.used)}\` / \`${formatBytes(stats.disk.total)}\`\n` +
-          `• **Free:** \`${formatBytes(Math.max(0, stats.disk.total - stats.disk.used))}\`\n` +
-          `• **Filesystem:** \`${stats.disk.fs || 'standard'}\``,
-        inline: false,
-      },
-      {
-        name: '🌐 Network Activity',
-        value: `• **Speed:** ⬇️ \`${formatBitrate(stats.network.rxSec)}\` | ⬆️ \`${formatBitrate(stats.network.txSec)}\`\n` +
-          `• **Total Transferred:** ⬇️ \`${formatBytes(stats.network.totalRxBytes)}\` | ⬆️ \`${formatBytes(stats.network.totalTxBytes)}\``,
-        inline: false,
-      },
-      {
-        name: '⚡ Status & Sync',
-        value: `${health.emoji} **${health.label}** • Last checked <t:${Math.floor(Date.now() / 1000)}:R>`,
-        inline: false,
-      }
-    )
-    .setFooter({ text: 'VPS Monitor • Auto-updates every 30 seconds' })
+      `📍 **Host:** \`${stats.os.hostname}\` • **Hardware:** \`${stats.hardware.model}\`\n` +
+      `🏷️ **OS:** \`${stats.os.distro} ${stats.os.release} (${stats.os.arch})\` • **Kernel:** \`${stats.os.kernel}\``
+    );
+
+  // Use the bot's avatar URL as the thumbnail
+  if (botAvatarUrl) {
+    embed.setThumbnail(botAvatarUrl);
+  }
+
+  embed.addFields(
+    {
+      name: '⏱️ System Uptime',
+      value: `\`${formatDuration(stats.os.uptimeSeconds)}\`\nBoot: <t:${stats.os.bootTimestamp}:d>`,
+      inline: true,
+    },
+    {
+      name: '🤖 Bot Status',
+      value: `Uptime: \`${formatDuration(stats.os.botUptimeSeconds)}\`\nPing: \`${pingDisplay}\``,
+      inline: true,
+    },
+    {
+      name: '⚙️ Processes',
+      value: `Total: \`${stats.processes.total}\`\nActive: \`${stats.processes.running}\``,
+      inline: true,
+    },
+    {
+      name: '🔥 CPU Load',
+      value:
+        `**Overall:** ${generateProgressBar(stats.cpu.usagePercent)}` +
+        (coreBarsText ? `\n${coreBarsText}` : ''),
+      inline: false,
+    },
+    {
+      name: '🧠 Memory Utilization (RAM & Swap)',
+      value:
+        `**RAM:** ${generateProgressBar(stats.memory.percent)}\n` +
+        `• **Used:** \`${formatBytes(stats.memory.used)}\` / \`${formatBytes(stats.memory.total)}\` • **Free:** \`${formatBytes(stats.memory.free)}\`\n` +
+        `• **Buffers/Cache:** \`${formatBytes(stats.memory.buffCache)}\` • **Available:** \`${formatBytes(stats.memory.available)}\`\n` +
+        `**Swap:** ${generateProgressBar(stats.memory.swapPercent)} (\`${formatBytes(stats.memory.swapUsed)}\` / \`${formatBytes(stats.memory.swapTotal)}\`)`,
+      inline: false,
+    },
+    {
+      name: '💾 Storage Distribution',
+      value:
+        `${generateProgressBar(stats.disk.percent)}\n` +
+        `• **Used:** \`${formatBytes(stats.disk.used)}\` / \`${formatBytes(stats.disk.total)}\` • **Free:** \`${formatBytes(stats.disk.free)}\``,
+      inline: false,
+    },
+    {
+      name: `🌐 Network Bandwidth (${stats.network.primaryIface})`,
+      value:
+        `• **Transfer Rates:** ⬇️ \`${formatBitrate(stats.network.rxSec)}\` | ⬆️ \`${formatBitrate(stats.network.txSec)}\`\n` +
+        `• **Total Transferred:** ⬇️ \`${formatBytes(stats.network.totalRxBytes)}\` | ⬆️ \`${formatBytes(stats.network.totalTxBytes)}\``,
+      inline: false,
+    },
+    {
+      name: '⚡ System Diagnostics',
+      value:
+        `${health.emoji} **${health.label}** • Refreshed: <t:${Math.floor(Date.now() / 1000)}:R> (<t:${Math.floor(Date.now() / 1000)}:T>)`,
+      inline: false,
+    }
+  );
+
+  embed.setFooter({ text: 'VPS Monitor • Auto-updates every 30s • Real-time metrics' })
     .setTimestamp();
 
   return embed;
@@ -70,46 +119,79 @@ export function buildMonitorEmbed(stats) {
 /**
  * Builds the /status one-off command embed.
  */
-export function buildStatusSnapshotEmbed(stats) {
+export function buildStatusSnapshotEmbed(stats, botPing = null, botAvatarUrl = null) {
   const health = getHealthStatus(
     stats.cpu.usagePercent,
     stats.memory.percent,
     stats.disk.percent
   );
 
-  return new EmbedBuilder()
-    .setTitle(`📊 System Snapshot: ${stats.serverName}`)
+  const pingDisplay =
+    botPing !== null && botPing >= 0 ? `${Math.round(botPing)}ms` : 'Healthy';
+
+  const embed = new EmbedBuilder()
+    .setTitle(`📊 System Snapshot • ${stats.serverName}`)
     .setColor(health.color)
     .setDescription(
-      `**Platform:** \`${stats.os.distro} ${stats.os.release} (${stats.os.arch})\`\n` +
-      `**Kernel:** \`${stats.os.kernel}\`\n` +
-      `**System Uptime:** \`${formatDuration(stats.os.uptimeSeconds)}\`\n` +
-      `**Bot Uptime:** \`${formatDuration(stats.os.botUptimeSeconds)}\``
-    )
-    .addFields(
-      {
-        name: '🔥 CPU',
-        value: `${generateProgressBar(stats.cpu.usagePercent)}\nCores: **${stats.cpu.cores}** @ **${stats.cpu.speedGhz}GHz**\nLoad Avg: \`${stats.cpu.loadAvg.map((l) => l.toFixed(2)).join(', ')}\``,
-        inline: true,
-      },
-      {
-        name: '🧠 RAM',
-        value: `${generateProgressBar(stats.memory.percent)}\nUsed: **${formatBytes(stats.memory.used)}**\nTotal: **${formatBytes(stats.memory.total)}**`,
-        inline: true,
-      },
-      {
-        name: '💾 Root Disk',
-        value: `${generateProgressBar(stats.disk.percent)}\nUsed: **${formatBytes(stats.disk.used)}**\nTotal: **${formatBytes(stats.disk.total)}**`,
-        inline: true,
-      },
-      {
-        name: '🌐 Network Transfer',
-        value: `Down: **${formatBitrate(stats.network.rxSec)}** (Total: ${formatBytes(stats.network.totalRxBytes)})\nUp: **${formatBitrate(stats.network.txSec)}** (Total: ${formatBytes(stats.network.totalTxBytes)})`,
-        inline: false,
-      }
-    )
-    .setFooter({ text: 'One-time system query' })
+      `📍 **Platform:** \`${stats.os.distro} ${stats.os.release} (${stats.os.arch})\`\n` +
+      `⚙️ **Kernel:** \`${stats.os.kernel}\` • **Hardware:** \`${stats.hardware.model}\`\n` +
+      `⏳ **System Uptime:** \`${formatDuration(stats.os.uptimeSeconds)}\` • 🤖 **Bot Uptime:** \`${formatDuration(stats.os.botUptimeSeconds)}\``
+    );
+
+  if (botAvatarUrl) {
+    embed.setThumbnail(botAvatarUrl);
+  }
+
+  let coreBarsText = '';
+  if (Array.isArray(stats.cpu.perCore) && stats.cpu.perCore.length > 0) {
+    const cores = stats.cpu.perCore.slice(0, 8);
+    coreBarsText = cores
+      .map((load, idx) => `\`Core ${idx}:\` ${generateProgressBar(load, 8)}`)
+      .join('\n');
+  }
+
+  embed.addFields(
+    {
+      name: '🔥 CPU Load',
+      value:
+        `**Overall:** ${generateProgressBar(stats.cpu.usagePercent)}` +
+        (coreBarsText ? `\n${coreBarsText}` : ''),
+      inline: false,
+    },
+    {
+      name: '🧠 Memory (RAM)',
+      value:
+        `${generateProgressBar(stats.memory.percent)}\n` +
+        `Used: **${formatBytes(stats.memory.used)}** / **${formatBytes(stats.memory.total)}**\n` +
+        `Free: **${formatBytes(stats.memory.free)}**`,
+      inline: true,
+    },
+    {
+      name: '💾 Storage',
+      value:
+        `${generateProgressBar(stats.disk.percent)}\n` +
+        `Used: **${formatBytes(stats.disk.used)}** / **${formatBytes(stats.disk.total)}**\n` +
+        `Free: **${formatBytes(stats.disk.free)}**`,
+      inline: true,
+    },
+    {
+      name: '🌐 Network Transfer',
+      value:
+        `Live: ⬇️ **${formatBitrate(stats.network.rxSec)}** | ⬆️ **${formatBitrate(stats.network.txSec)}**\n` +
+        `Total: ⬇️ **${formatBytes(stats.network.totalRxBytes)}** | ⬆️ **${formatBytes(stats.network.totalTxBytes)}**`,
+      inline: false,
+    },
+    {
+      name: '⚡ Status',
+      value: `${health.emoji} **${health.label}** • Ping: \`${pingDisplay}\``,
+      inline: false,
+    }
+  );
+
+  embed.setFooter({ text: 'One-time system query' })
     .setTimestamp();
+
+  return embed;
 }
 
 /**

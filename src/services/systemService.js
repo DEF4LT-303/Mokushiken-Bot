@@ -9,14 +9,17 @@ let lastNetworkTime = null;
  * Gathers a full snapshot of the VPS hardware and runtime metrics.
  */
 export async function getSystemStats() {
-  const [currentLoad, cpu, mem, fsSize, networkStats, osInfo, time] = await Promise.all([
+  const [currentLoad, cpu, mem, fsSize, networkStats, osInfo, time, sys, procs, temp] = await Promise.all([
     si.currentLoad().catch(() => ({ currentLoad: 0, cpus: [] })),
     si.cpu().catch(() => ({ brand: 'Unknown CPU', cores: 1, physicalCores: 1, speed: 0 })),
-    si.mem().catch(() => ({ total: 1, used: 0, active: 0, free: 0, swaptotal: 0, swapused: 0 })),
+    si.mem().catch(() => ({ total: 1, used: 0, active: 0, free: 0, buffcache: 0, cached: 0, buffers: 0, swaptotal: 0, swapused: 0 })),
     si.fsSize().catch(() => []),
     si.networkStats().catch(() => []),
-    si.osInfo().catch(() => ({ distro: 'Linux', release: '', arch: 'x64', hostname: os.hostname() })),
+    si.osInfo().catch(() => ({ distro: 'Linux', release: '', arch: 'x64', hostname: os.hostname(), kernel: '' })),
     si.time(),
+    si.system().catch(() => ({ manufacturer: '', model: '', virtual: false })),
+    si.processes().catch(() => ({ all: 0, running: 0, blocked: 0 })),
+    si.cpuTemperature().catch(() => ({ main: null })),
   ]);
 
   // Load averages (Linux 1m, 5m, 15m; on Windows os.loadavg() is [0, 0, 0])
@@ -25,7 +28,6 @@ export async function getSystemStats() {
   // Primary / Root disk selection
   let primaryDisk = null;
   if (Array.isArray(fsSize) && fsSize.length > 0) {
-    // Look for root '/' on Linux, or 'C:' on Windows
     primaryDisk =
       fsSize.find((f) => f.mount === '/' || f.mount === 'C:' || f.mount === 'C:\\') ||
       fsSize[0];
@@ -40,8 +42,10 @@ export async function getSystemStats() {
   let totalTxSec = 0;
   let totalRxBytes = 0;
   let totalTxBytes = 0;
+  let primaryIfaceName = 'eth0';
 
   if (Array.isArray(networkStats) && networkStats.length > 0) {
+    primaryIfaceName = networkStats[0]?.iface || 'eth0';
     for (const iface of networkStats) {
       if (iface.rx_sec && iface.rx_sec > 0) totalRxSec += iface.rx_sec;
       if (iface.tx_sec && iface.tx_sec > 0) totalTxSec += iface.tx_sec;
@@ -55,11 +59,17 @@ export async function getSystemStats() {
   const memTotal = mem.total || 1;
   const memPercent = (memUsed / memTotal) * 100;
   const swapPercent = mem.swaptotal > 0 ? (mem.swapused / mem.swaptotal) * 100 : 0;
+  const buffCache = mem.buffcache || (mem.buffers || 0) + (mem.cached || 0);
 
   const serverName = config.serverName || osInfo.hostname || os.hostname() || 'VPS Server';
 
   return {
     serverName,
+    hardware: {
+      manufacturer: sys.manufacturer || 'Generic',
+      model: sys.model || (sys.virtual ? 'Virtual Machine / VPS' : 'Bare Metal'),
+      virtual: Boolean(sys.virtual),
+    },
     os: {
       distro: osInfo.distro || 'Unknown OS',
       release: osInfo.release || '',
@@ -67,6 +77,7 @@ export async function getSystemStats() {
       hostname: osInfo.hostname || os.hostname(),
       kernel: osInfo.kernel || os.release(),
       uptimeSeconds: time.uptime || os.uptime(),
+      bootTimestamp: Math.floor(Date.now() / 1000 - (time.uptime || os.uptime())),
       botUptimeSeconds: Math.floor(process.uptime()),
     },
     cpu: {
@@ -77,12 +88,14 @@ export async function getSystemStats() {
       usagePercent: currentLoad.currentLoad || 0,
       perCore: (currentLoad.cpus || []).map((c) => c.load || 0),
       loadAvg: loadAverages,
+      temperature: temp?.main || null,
     },
     memory: {
       total: memTotal,
       used: memUsed,
-      free: mem.free,
-      available: mem.available || mem.free,
+      free: mem.free || 0,
+      available: mem.available || mem.free || 0,
+      buffCache,
       percent: memPercent,
       swapTotal: mem.swaptotal,
       swapUsed: mem.swapused,
@@ -94,15 +107,22 @@ export async function getSystemStats() {
       fs: primaryDisk?.fs || '',
       total: diskTotal,
       used: diskUsed,
+      free: Math.max(0, diskTotal - diskUsed),
       percent: diskPercent,
       allDisks: fsSize,
     },
     network: {
+      primaryIface: primaryIfaceName,
       rxSec: totalRxSec,
       txSec: totalTxSec,
       totalRxBytes,
       totalTxBytes,
       interfacesCount: networkStats.length,
+    },
+    processes: {
+      total: procs.all || 0,
+      running: procs.running || 0,
+      blocked: procs.blocked || 0,
     },
     timestamp: Date.now(),
   };

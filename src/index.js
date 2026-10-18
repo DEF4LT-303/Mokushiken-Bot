@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { config, validateConfig } from './config.js';
 import { initMonitorService, stopMonitorService } from './services/monitorService.js';
+import { logger } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,9 +18,9 @@ const __dirname = path.dirname(__filename);
 // Validate environment variables before startup
 const { valid, errors } = validateConfig();
 if (!valid) {
-  console.error('\n❌ Configuration Error:');
-  for (const err of errors) console.error(`  - ${err}`);
-  console.error('\nPlease copy .env.example to .env and configure DISCORD_TOKEN and CLIENT_ID.');
+  logger.error('Configuration Error:');
+  for (const err of errors) logger.error(`  - ${err}`);
+  logger.error('Please copy .env.example to .env and configure DISCORD_TOKEN and CLIENT_ID.');
   process.exit(1);
 }
 
@@ -43,17 +44,17 @@ for (const file of commandFiles) {
   if ('data' in command && 'execute' in command) {
     client.commands.set(command.data.name, command);
   } else {
-    console.warn(`[Bot] Warning: The command at ${file} is missing required 'data' or 'execute' export.`);
+    logger.warn(`The command at ${file} is missing required 'data' or 'execute' export.`);
   }
 }
 
 // Client ready event
 client.once(Events.ClientReady, async (readyClient) => {
-  console.log(`\n==============================================`);
-  console.log(`🤖 Logged in as: ${readyClient.user.tag} (ID: ${readyClient.user.id})`);
-  console.log(`📊 Serving ${readyClient.guilds.cache.size} server(s)`);
-  console.log(`🔄 VPS Status Check Interval: ${config.checkInterval} seconds`);
-  console.log(`==============================================\n`);
+  logger.info(`==============================================`);
+  logger.info(`Logged in as: ${readyClient.user.tag} (ID: ${readyClient.user.id})`);
+  logger.info(`Serving ${readyClient.guilds.cache.size} server(s)`);
+  logger.info(`VPS Status Check Interval: ${config.checkInterval} seconds`);
+  logger.info(`==============================================`);
 
   readyClient.user.setActivity('VPS Health • /help', {
     type: ActivityType.Watching,
@@ -69,14 +70,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   const command = client.commands.get(interaction.commandName);
   if (!command) {
-    console.error(`[Interaction] No command matching /${interaction.commandName} was found.`);
+    logger.warn(`No command matching /${interaction.commandName} was found.`);
     return;
   }
 
+  const startTime = Date.now();
   try {
     await command.execute(interaction);
+    const duration = Date.now() - startTime;
+    logger.cmd(
+      interaction.user.tag,
+      interaction.user.id,
+      interaction.guild?.name || 'DM',
+      interaction.commandName,
+      duration,
+      true
+    );
   } catch (error) {
-    console.error(`[Interaction] Error executing /${interaction.commandName}:`, error);
+    const duration = Date.now() - startTime;
+    logger.cmd(
+      interaction.user.tag,
+      interaction.user.id,
+      interaction.guild?.name || 'DM',
+      interaction.commandName,
+      duration,
+      false
+    );
+    logger.error(`Error executing /${interaction.commandName}:`, error);
 
     const errorMessage = {
       content: '❌ An error occurred while executing this command.',
@@ -93,7 +113,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 // Graceful shutdown handling
 async function handleShutdown(signal) {
-  console.log(`\n[Bot] Received ${signal}. Shutting down gracefully...`);
+  logger.info(`Received ${signal}. Shutting down gracefully...`);
   stopMonitorService();
   client.destroy();
   process.exit(0);
@@ -104,7 +124,6 @@ process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 
 // Connect to Discord
 client.login(config.token).catch((err) => {
-  console.error('\n❌ Failed to login to Discord:');
-  console.error(err.message);
+  logger.error('Failed to login to Discord:', err.message);
   process.exit(1);
 });

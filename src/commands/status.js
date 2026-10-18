@@ -18,7 +18,8 @@ export async function execute(interaction) {
 
   try {
     const stats = await getSystemStats();
-    const embed = buildStatusSnapshotEmbed(stats);
+    const avatarUrl = interaction.client.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || null;
+    const embed = buildStatusSnapshotEmbed(stats, interaction.client.ws.ping, avatarUrl);
     return interaction.editReply({ embeds: [embed] });
   } catch (err) {
     console.error('[Command: /status] Error:', err);
