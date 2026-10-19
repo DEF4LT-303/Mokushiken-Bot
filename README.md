@@ -73,7 +73,7 @@ It maintains an auto-refreshing status embed every **30 seconds** in your design
    ```env
    DISCORD_TOKEN=your_bot_token_here
    CLIENT_ID=your_client_id_here
-   GUILD_ID=your_guild_id_here         # Optional: for instant slash command registration
+   GUILD_ID=your_guild_id_here         # Optional: for instant slash command registration (comma-separated for multiple guilds)
    CHECK_INTERVAL=30                   # Refresh interval in seconds
    SERVER_NAME=Ubuntu-Production-VPS   # Custom display name (or leave blank for hostname)
    OWNER_IDS=your_discord_user_id      # For /exec command authorization
@@ -92,7 +92,7 @@ npm install
 npm run deploy
 ```
 
-> **Note:** If `GUILD_ID` is set in `.env`, commands appear in your server immediately. If left empty, commands register globally and can take up to 1 hour to propagate.
+> **Note:** If `GUILD_ID` is set in `.env` (can be a comma-separated list), commands appear in those servers immediately. If left empty, commands register globally and can take up to 1 hour to propagate.
 
 ---
 

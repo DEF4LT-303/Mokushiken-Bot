@@ -10,7 +10,10 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 export const config = {
   token: process.env.DISCORD_TOKEN || '',
   clientId: process.env.CLIENT_ID || '',
-  guildId: process.env.GUILD_ID || '',
+  guildIds: (process.env.GUILD_ID || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean),
   checkInterval: Math.max(10, parseInt(process.env.CHECK_INTERVAL || '30', 10)),
   serverName: process.env.SERVER_NAME || null,
   storagePath: path.resolve(__dirname, '../', process.env.STORAGE_PATH || './data/monitor_state.json'),

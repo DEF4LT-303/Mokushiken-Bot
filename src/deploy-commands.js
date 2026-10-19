@@ -37,12 +37,15 @@ async function deploy() {
     console.log(`[Deploy] Refreshing ${commands.length} application (/) commands...`);
 
     let data;
-    if (config.guildId) {
-      console.log(`[Deploy] Registering commands to Guild ID: ${config.guildId} (Instant propagation)`);
-      data = await rest.put(
-        Routes.applicationGuildCommands(config.clientId, config.guildId),
-        { body: commands }
-      );
+    if (config.guildIds && config.guildIds.length > 0) {
+      console.log(`[Deploy] Registering commands to ${config.guildIds.length} Guild(s) (Instant propagation)`);
+      for (const guildId of config.guildIds) {
+        console.log(`[Deploy] -> Guild ID: ${guildId}`);
+        data = await rest.put(
+          Routes.applicationGuildCommands(config.clientId, guildId),
+          { body: commands }
+        );
+      }
     } else {
       console.log('[Deploy] Registering commands globally (May take up to an hour to propagate globally across all servers)');
       data = await rest.put(
